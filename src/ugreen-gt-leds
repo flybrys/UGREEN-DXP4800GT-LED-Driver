@@ -1,0 +1,270 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+# UGREEN DXP4800 GT front-panel LEDs for Unraid.
+# The kernel modules are distributed separately for each exact Unraid kernel.
+
+plugin_dir=/boot/config/plugins/ugreen-dxp4800gt-leds
+config_file=${UGREEN_GT_CONFIG:-$plugin_dir/settings.cfg}
+pid_file=${UGREEN_GT_PID_FILE:-/run/ugreen-gt-leds.pid}
+lock_file=${UGREEN_GT_LOCK_FILE:-/run/ugreen-gt-leds.lock}
+log_file=${UGREEN_GT_LOG_FILE:-/var/log/ugreen-gt-leds.log}
+
+POWER_COLOR='255 255 255'
+POWER_BRIGHTNESS=180
+NETWORK_INTERFACE=auto
+NETWORK_BRIGHTNESS=180
+NETWORK_COLOR_DOWN='255 0 0'
+NETWORK_COLOR_OTHER='255 165 0'
+NETWORK_COLOR_100='0 255 0'
+NETWORK_COLOR_1000='0 0 255'
+NETWORK_COLOR_2500='255 255 0'
+NETWORK_COLOR_10000='255 255 255'
+DISK_COLOR='255 255 255'
+DISK_COLOR_MISSING='255 0 0'
+DISK_BRIGHTNESS=180
+DISK_ATA_PORTS=(1 2 3 4)
+POLL_INTERVAL=0.5
+REFRESH_INTERVAL=15
+
+if [[ -f $config_file ]]; then
+  # This is an administrator-owned shell configuration file on the boot device.
+  source "$config_file"
+fi
+
+log() { printf '%s %s\n' "$(date '+%F %T')" "$*"; }
+fail() { log "ERROR: $*" >&2; exit 1; }
+led_path() { printf '/sys/class/leds/%s' "$1"; }
+
+model_check() {
+  [[ $(cat /sys/class/dmi/id/product_name) == 'DXP4800 GT' ]] ||
+    fail 'This plugin supports only DXP4800 GT.'
+}
+
+module_loaded() { grep -q "^${1}[[:space:]]" /proc/modules; }
+
+load_module() {
+  local name=$1 file=$2
+  shift 2
+  if module_loaded "${name//-/_}"; then return 0; fi
+  case $name in
+    i2c-designware-core|i2c-designware-platform|led-ugreen)
+      if [[ -n ${UGREEN_GT_MODULE_DIR:-} ]]; then
+        insmod "$UGREEN_GT_MODULE_DIR/$file" "$@"
+      else
+        modprobe "$name" "$@"
+      fi ;;
+    *) modprobe "$name" "$@" ;;
+  esac
+}
+
+find_mcu_bus() {
+  local path name bus chip client
+  for path in /sys/class/i2c-dev/i2c-*; do
+    [[ -r $path/name ]] || continue
+    [[ $(cat "$path/name") == 'Synopsys DesignWare I2C adapter' ]] || continue
+    name=${path##*/}
+    bus=${name#i2c-}
+    client=/sys/bus/i2c/devices/${bus}-003a
+    if [[ -e $client ]]; then
+      [[ $(cat "$client/name") == 'led-ugreen' ]] ||
+        fail "I2C address 0x3a on $name is in use by another driver."
+      printf '%s\n' "$name"
+      return 0
+    fi
+    chip=$(i2cget -y "$bus" 0x3a 0x5a w 2>/dev/null || true)
+    if [[ $chip == 0xc5b2 ]]; then
+      printf '%s\n' "$name"
+      return 0
+    fi
+  done
+  return 1
+}
+
+setup_hardware() {
+  model_check
+  command -v i2cget >/dev/null || fail 'i2cget is required to locate the LED MCU.'
+  load_module i2c-dev i2c-dev.ko
+  load_module i2c-designware-core i2c-designware-core.ko
+  load_module i2c-designware-platform i2c-designware-platform.ko
+  load_module ledtrig-netdev ledtrig-netdev.ko
+  load_module ledtrig-oneshot ledtrig-oneshot.ko
+  if module_loaded led_ugreen; then
+    [[ -r /sys/module/led_ugreen/parameters/write_protocol ]] ||
+      fail 'An older led-ugreen module is loaded. Remove the other UGREEN LED plugin.'
+    [[ $(cat /sys/module/led_ugreen/parameters/write_protocol) == smbus-block ]] ||
+      fail 'led-ugreen is loaded with the wrong protocol.'
+  else
+    load_module led-ugreen led-ugreen.ko write_protocol=smbus-block num_disk_leds=4
+  fi
+  local bus
+  bus=$(find_mcu_bus) || fail 'UGREEN LED MCU was not found on a DesignWare bus.'
+  if [[ ! -e /sys/bus/i2c/devices/${bus#i2c-}-003a ]]; then
+    printf 'led-ugreen 0x3a\n' > "/sys/bus/i2c/devices/$bus/new_device"
+  fi
+  [[ -d $(led_path power) && -d $(led_path netdev) && -d $(led_path disk1) ]] ||
+    fail 'LED module did not create the expected sysfs entries.'
+  log "LED MCU bound on $bus."
+}
+
+pick_network_interface() {
+  if [[ $NETWORK_INTERFACE != auto ]]; then
+    printf '%s\n' "$NETWORK_INTERFACE"
+  else
+    ip -o route show default | awk 'NR == 1 { print $5 }'
+  fi
+}
+
+network_color() {
+  local iface=$1 speed
+  if [[ ! -r /sys/class/net/$iface/carrier ]] ||
+     [[ $(cat "/sys/class/net/$iface/carrier" 2>/dev/null || true) != 1 ]]; then
+    printf '%s\n' "$NETWORK_COLOR_DOWN"
+    return
+  fi
+  speed=$(cat "/sys/class/net/$iface/speed" 2>/dev/null || true)
+  case $speed in
+    100) printf '%s\n' "$NETWORK_COLOR_100" ;;
+    1000) printf '%s\n' "$NETWORK_COLOR_1000" ;;
+    2500) printf '%s\n' "$NETWORK_COLOR_2500" ;;
+    10000) printf '%s\n' "$NETWORK_COLOR_10000" ;;
+    *) printf '%s\n' "$NETWORK_COLOR_OTHER" ;;
+  esac
+}
+
+configure_network() {
+  local iface color
+  iface=$(pick_network_interface)
+  [[ -n $iface && -d /sys/class/net/$iface ]] || fail 'No usable network interface.'
+  color=$(network_color "$iface")
+  if [[ ${current_network_interface:-} != "$iface" ]]; then
+    printf 'none\n' > /sys/class/leds/netdev/trigger
+    printf '%s\n' "$color" > /sys/class/leds/netdev/color
+    printf '%s\n' "$NETWORK_BRIGHTNESS" > /sys/class/leds/netdev/brightness
+    printf 'netdev\n' > /sys/class/leds/netdev/trigger
+    printf '%s\n' "$iface" > /sys/class/leds/netdev/device_name
+    printf '1\n' > /sys/class/leds/netdev/link
+    printf '1\n' > /sys/class/leds/netdev/tx
+    printf '1\n' > /sys/class/leds/netdev/rx
+    printf '500\n' > /sys/class/leds/netdev/interval
+    current_network_interface=$iface
+    log "Network LED monitors $iface."
+  elif [[ $(cat /sys/class/leds/netdev/color) != "$color" ]]; then
+    printf '%s\n' "$color" > /sys/class/leds/netdev/color
+  fi
+}
+
+device_on_ata_port() {
+  local port=$1 block path
+  for block in /sys/class/block/sd*; do
+    [[ -e $block/device ]] || continue
+    path=$(readlink -f "$block/device")
+    if [[ $path == *"/ata${port}/"* ]]; then
+      printf '%s\n' "${block##*/}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+declare -A bay_device bay_signature bay_seen
+
+configure_bay() {
+  local bay=$1 port=$2 led="disk$1" device path
+  path=$(led_path "$led")
+  [[ -d $path ]] || return 0
+  device=$(device_on_ata_port "$port" || true)
+  if [[ ${bay_device[$bay]-unset} == "$device" ]]; then return 0; fi
+  if [[ -n $device ]]; then
+    printf 'none\n' > "$path/trigger"
+    printf '%s\n' "$DISK_COLOR" > "$path/color"
+    printf '%s\n' "$DISK_BRIGHTNESS" > "$path/brightness"
+    printf 'oneshot\n' > "$path/trigger"
+    printf '1\n' > "$path/invert"
+    printf '100\n' > "$path/delay_on"
+    printf '100\n' > "$path/delay_off"
+    bay_device[$bay]=$device
+    bay_seen[$bay]=1
+    bay_signature[$bay]=''
+    log "$led monitors ATA port $port ($device)."
+  elif [[ ${bay_seen[$bay]:-0} == 1 ]]; then
+    printf 'none\n' > "$path/trigger"
+    printf '%s\n' "$DISK_COLOR_MISSING" > "$path/color"
+    printf '%s\n' "$DISK_BRIGHTNESS" > "$path/brightness"
+    bay_device[$bay]=''
+    bay_signature[$bay]=''
+    log "$led: drive on ATA port $port disappeared."
+  else
+    printf 'none\n' > "$path/trigger"
+    printf '0\n' > "$path/brightness"
+    bay_device[$bay]=''
+    bay_signature[$bay]=''
+  fi
+}
+
+poll_disk_activity() {
+  local bay device path signature
+  local -a counters
+  for bay in 1 2 3 4; do
+    device=${bay_device[$bay]:-}
+    [[ -n $device && -r /sys/class/block/$device/stat ]] || continue
+    read -r -a counters < "/sys/class/block/$device/stat"
+    signature="${counters[2]}:${counters[6]}"
+    path=$(led_path "disk$bay")
+    if [[ -n ${bay_signature[$bay]:-} && ${bay_signature[$bay]} != "$signature" ]]; then
+      printf '1\n' > "$path/shot"
+      [[ ${UGREEN_GT_DEBUG:-0} == 1 ]] && log "Activity on disk$bay ($device)."
+    fi
+    bay_signature[$bay]=$signature
+  done
+}
+
+run() {
+  exec 9> "$lock_file"
+  flock -n 9 || fail 'LED monitor is already running.'
+  printf '%s\n' "$$" > "$pid_file"
+  trap 'rm -f "$pid_file"' EXIT
+  setup_hardware
+  printf 'none\n' > /sys/class/leds/power/trigger
+  printf '%s\n' "$POWER_COLOR" > /sys/class/leds/power/color
+  printf '%s\n' "$POWER_BRIGHTNESS" > /sys/class/leds/power/brightness
+  configure_network
+  local bay next_refresh=0
+  while :; do
+    if (( SECONDS >= next_refresh )); then
+      for bay in 1 2 3 4; do
+        configure_bay "$bay" "${DISK_ATA_PORTS[bay-1]}"
+      done
+      configure_network
+      next_refresh=$((SECONDS + REFRESH_INTERVAL))
+    fi
+    poll_disk_activity
+    sleep "$POLL_INTERVAL"
+  done
+}
+
+case ${1:-} in
+  run) run ;;
+  start)
+    if [[ -r $pid_file ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+      echo 'UGREEN GT LED monitor is already running.'
+      exit 0
+    fi
+    nohup "$0" run >> "$log_file" 2>&1 < /dev/null &
+    echo "UGREEN GT LED monitor started as PID $!."
+    ;;
+  stop)
+    if [[ -r $pid_file ]]; then
+      kill "$(cat "$pid_file")" 2>/dev/null || true
+    fi
+    ;;
+  status)
+    if [[ -r $pid_file ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+      echo 'UGREEN GT LED monitor is running.'
+    else
+      echo 'UGREEN GT LED monitor is stopped.'
+      exit 1
+    fi
+    ;;
+  *) echo "Usage: $0 {start|stop|status|run}" >&2; exit 2 ;;
+esac

@@ -1,0 +1,74 @@
+<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name "ugreen-dxp4800gt-leds">
+  <!ENTITY version "2026.09.25">
+  <!ENTITY plugin "/boot/config/plugins/&name;">
+  <!ENTITY release "https://github.com/flybrys/unraid-ugreen-dxp4800gt-leds/releases/download/v&version;">
+]>
+<PLUGIN name="&name;" author="flybrys" version="&version;"
+        pluginURL="https://raw.githubusercontent.com/flybrys/unraid-ugreen-dxp4800gt-leds/main/ugreen-dxp4800gt-leds.plg"
+        min="7.3.2" support="https://github.com/flybrys/unraid-ugreen-dxp4800gt-leds/issues">
+<CHANGES>
+###2026.09.25
+- Initial support for DXP4800 GT on Unraid 7.3.2 (kernel 6.18.38-Unraid).
+</CHANGES>
+
+<FILE Run="/bin/bash">
+<INLINE>
+set -e
+[[ $(uname -r) == 6.18.38-Unraid ]] || { echo 'Unsupported kernel; exact matching modules are required.' &gt;&amp;2; exit 1; }
+[[ $(cat /sys/class/dmi/id/product_name) == 'DXP4800 GT' ]] || { echo 'DXP4800 GT required.' &gt;&amp;2; exit 1; }
+[[ ! -f /boot/config/plugins/ugreenleds-driver.plg ]] || { echo 'Remove the old ugreenleds-driver plugin first.' &gt;&amp;2; exit 1; }
+</INLINE>
+</FILE>
+
+<FILE Name="&plugin;/i2c-tools-4.3-x86_64-1.txz" Run="upgradepkg --install-new">
+<URL>&release;/i2c-tools-4.3-x86_64-1.txz</URL>
+<SHA256>9730e890d81743f4827715ae38019715fe8252c9bc6d95af4b5f64339238106c</SHA256>
+</FILE>
+
+<FILE Name="&plugin;/&name;-&version;-x86_64-1.txz" Run="upgradepkg --install-new">
+<URL>&release;/&name;-&version;-x86_64-1.txz</URL>
+<SHA256>9db9056d19649f481d5f56edbb8eafc7db5961c87e4067b887cb85de1cd260c2</SHA256>
+</FILE>
+
+<FILE Name="&plugin;/settings.example.cfg">
+<INLINE>
+# Copy to settings.cfg to customize. Defaults are suitable for DXP4800 GT.
+POWER_COLOR='255 255 255'
+POWER_BRIGHTNESS=180
+NETWORK_INTERFACE=auto
+NETWORK_BRIGHTNESS=180
+DISK_COLOR='255 255 255'
+DISK_BRIGHTNESS=180
+DISK_ATA_PORTS=(1 2 3 4)
+POLL_INTERVAL=0.5
+REFRESH_INTERVAL=15
+</INLINE>
+</FILE>
+
+<FILE Run="/bin/bash">
+<INLINE>
+set -e
+depmod -a
+/usr/local/sbin/ugreen-gt-leds start
+sleep 2
+/usr/local/sbin/ugreen-gt-leds status
+</INLINE>
+</FILE>
+
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+/usr/local/sbin/ugreen-gt-leds stop 2&gt;/dev/null || true
+sleep 1
+for dev in /sys/bus/i2c/devices/*-003a; do
+  [[ -e $dev &amp;&amp; $(cat "$dev/name" 2&gt;/dev/null) == led-ugreen ]] || continue
+  bus=${dev##*/}; bus=${bus%-003a}
+  printf '0x3a\n' &gt; "/sys/bus/i2c/devices/i2c-$bus/delete_device"
+done
+modprobe -r led-ugreen i2c-designware-platform i2c-designware-core 2&gt;/dev/null || true
+removepkg ugreen-dxp4800gt-leds-2026.09.25-x86_64-1 2&gt;/dev/null || true
+rm -rf /boot/config/plugins/ugreen-dxp4800gt-leds
+</INLINE>
+</FILE>
+</PLUGIN>

@@ -1,0 +1,8 @@
+*.sh text eol=lf
+src/ugreen-gt-leds text eol=lf
+*.cfg text eol=lf
+*.plg text eol=lf
+*.md text eol=lf
+*.ko binary
+*.txz binary
+dist/6.18.38-Unraid/ugreen_leds_cli binary
