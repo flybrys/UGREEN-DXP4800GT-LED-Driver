@@ -1,5 +1,6 @@
 /.gitattributes text eol=lf
 *.sh text eol=lf
+*.c text eol=lf
 src/ugreen-gt-leds text eol=lf
 *.cfg text eol=lf
 *.plg text eol=lf
@@ -12,4 +13,5 @@ src/ugreen-gt-leds text eol=lf
 dist/**/BUILD_INFO text eol=lf
 dist/**/SHA256SUMS text eol=lf
 *.ko binary
+dist/**/ugreen-gt-disk-activity binary
 *.txz binary

@@ -18,11 +18,11 @@ Updates and removal are managed from Unraid's **Plugins** page. The plugin has n
 | --- | --- |
 | Power | Solid white while Unraid is running; white blink during an orderly shutdown. |
 | LAN | Solid white when the internet check succeeds; solid orange when the link or check fails. Flashes in the current color during sustained data transfer. Background packets leave it solid. |
-| Drive bays 1–4 | White flash for disk reads or writes; white breathing while a drive reports standby; slow orange flash for an explicit SMART health failure. Empty bays are off. |
+| Drive bays 1–4 | Off while idle; short white flash for each burst of disk reads or writes; white breathing while a drive reports standby; slow orange flash for an explicit SMART health failure. Empty bays are off. |
 
 These patterns follow [UGREEN's LED guide](https://ai.ugreen.com/blogs/knowledge/ugreen-nas-led-indicators-meaning). The LAN check tries `https://unraid.net/` and then `https://ai.ugreen.com/` every 60 seconds. Success means at least one site is reachable. The flash threshold is 64 KiB of network traffic per 0.5 second sample, so ordinary background traffic does not keep the light blinking.
 
-The drive LEDs map to the four SATA bays. A missing drive is shown as an empty bay. Orange requires an explicit SMART failure result; it does not replace Unraid's drive health monitoring. The power LED stays white for system conditions that this plugin cannot reliably identify, such as general system faults or sleep.
+The drive LEDs map to the four SATA bays. Disk activity comes from the kernel's per-device block request events, with closely spaced requests grouped into a brief pulse. If the event monitor cannot start, the plugin falls back to its earlier 0.5-second disk counter polling. A missing drive is shown as an empty bay. Orange requires an explicit SMART failure result; it does not replace Unraid's drive health monitoring. The power LED stays white for system conditions that this plugin cannot reliably identify, such as general system faults or sleep.
 
 ## Help and settings
 

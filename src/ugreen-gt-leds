@@ -24,6 +24,7 @@ NETWORK_ACTIVITY_BYTES=65536
 DISK_COLOR='255 255 255'
 DISK_COLOR_FAILED='255 165 0'
 DISK_BRIGHTNESS=180
+DISK_PULSE_MS=80
 DISK_ATA_PORTS=(1 2 3 4)
 POLL_INTERVAL=0.5
 REFRESH_INTERVAL=15
@@ -222,9 +223,12 @@ set_bay_mode() {
     active)
       printf 'none\n' > "$path/blink_type"
       printf '%s\n' "$DISK_COLOR" > "$path/color"
+      # The one-shot trigger uses the LED's current state as its idle state.
+      # Start from off so each block request lights the LED briefly.
+      printf '0\n' > "$path/brightness"
       printf 'oneshot\n' > "$path/trigger"
-      printf '1\n' > "$path/invert"
-      printf '100\n' > "$path/delay_on"
+      printf '0\n' > "$path/invert"
+      printf '%s\n' "$DISK_PULSE_MS" > "$path/delay_on"
       printf '100\n' > "$path/delay_off" ;;
     standby)
       printf '%s\n' "$DISK_COLOR" > "$path/color"
@@ -290,18 +294,47 @@ poll_disk_activity() {
     path=$(led_path "disk$bay")
     if [[ -n ${bay_signature[$bay]:-} && ${bay_signature[$bay]} != "$signature" ]]; then
       if [[ ${bay_mode[$bay]:-} == standby ]]; then set_bay_mode "$bay" active; fi
-      if [[ ${bay_mode[$bay]:-} == active ]]; then printf '1\n' > "$path/shot"; fi
+      if [[ ${bay_mode[$bay]:-} == active ]] && ! activity_helper_running; then
+        printf '1\n' > "$path/shot"
+      fi
       [[ ${UGREEN_GT_DEBUG:-0} == 1 ]] && log "Activity on disk$bay ($device)."
     fi
     bay_signature[$bay]=$signature
   done
 }
 
+activity_helper_running() {
+  [[ -n ${activity_pid:-} ]] && kill -0 "$activity_pid" 2>/dev/null
+}
+
+start_activity_helper() {
+  local helper=${UGREEN_GT_ACTIVITY_HELPER:-/usr/local/sbin/ugreen-gt-disk-activity}
+  [[ -x $helper ]] || { log 'Event-driven disk activity helper is unavailable; using polling.'; return 0; }
+  "$helper" "${DISK_ATA_PORTS[@]}" >> "$log_file" 2>&1 &
+  activity_pid=$!
+  sleep 0.2
+  if activity_helper_running; then
+    log "Event-driven disk activity helper started as PID $activity_pid."
+  else
+    wait "$activity_pid" || true
+    activity_pid=''
+    log 'Event-driven disk activity helper could not start; using polling.'
+  fi
+}
+
+cleanup() {
+  if activity_helper_running; then
+    kill "$activity_pid" 2>/dev/null || true
+    wait "$activity_pid" 2>/dev/null || true
+  fi
+  rm -f "$pid_file"
+}
+
 run() {
   exec 9> "$lock_file"
   flock -n 9 || fail 'LED monitor is already running.'
   printf '%s\n' "$$" > "$pid_file"
-  trap 'rm -f "$pid_file"' EXIT
+  trap cleanup EXIT
   setup_hardware
   printf 'none\n' > /sys/class/leds/power/trigger
   printf 'none\n' > /sys/class/leds/power/blink_type
@@ -309,6 +342,7 @@ run() {
   printf '%s\n' "$POWER_BRIGHTNESS" > /sys/class/leds/power/brightness
   configure_network
   local bay next_refresh=0 next_disk_status=0
+  start_activity_helper
   while :; do
     if (( SECONDS >= next_refresh )); then
       for bay in 1 2 3 4; do

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-version=2026.09.25.2
+version=2026.09.25.3
 kernel=6.18.38-Unraid
 name=ugreen-dxp4800gt-leds
 stage=$root/build/stage
@@ -13,8 +13,10 @@ package=$root/artifacts/$name-$version-x86_64-1.txz
 command -v makepkg >/dev/null
 
 rm -rf -- "$stage"
-mkdir -p "$stage/usr/local/sbin" "$stage/lib/modules/$kernel/extra/$name" "$stage/install"
+mkdir -p "$stage/usr/local/sbin" "$stage/usr/local/emhttp/plugins/UGREEN-DXP4800GT-LED-Driver" "$stage/lib/modules/$kernel/extra/$name" "$stage/install"
 install -m 755 "$root/src/ugreen-gt-leds" "$stage/usr/local/sbin/ugreen-gt-leds"
+install -m 755 "$root/dist/$kernel/ugreen-gt-disk-activity" "$stage/usr/local/sbin/ugreen-gt-disk-activity"
+install -m 644 "$root/src/plugin-readme.md" "$stage/usr/local/emhttp/plugins/UGREEN-DXP4800GT-LED-Driver/README.md"
 for module in i2c-designware-core i2c-designware-platform led-ugreen; do
   install -m 644 "$root/dist/$kernel/$module.ko" "$stage/lib/modules/$kernel/extra/$name/$module.ko"
 done
