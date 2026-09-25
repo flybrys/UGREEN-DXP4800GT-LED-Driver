@@ -1,7 +1,7 @@
 <?xml version="1.0" standalone="yes"?>
 <!DOCTYPE PLUGIN [
   <!ENTITY name "ugreen-dxp4800gt-leds">
-  <!ENTITY version "2026.09.25">
+  <!ENTITY version "2026.09.25.1">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY release "https://github.com/flybrys/unraid-ugreen-dxp4800gt-leds/releases/download/v&version;">
 ]>
@@ -9,6 +9,11 @@
         pluginURL="https://raw.githubusercontent.com/flybrys/unraid-ugreen-dxp4800gt-leds/main/ugreen-dxp4800gt-leds.plg"
         min="7.3.2" support="https://github.com/flybrys/unraid-ugreen-dxp4800gt-leds/issues">
 <CHANGES>
+###2026.09.25.1
+- Use UGREEN's white/orange LAN meanings instead of link-speed colors.
+- Breathe white for standby drives and blink orange for explicit SMART failure.
+- Blink the white power LED during orderly Unraid shutdown.
+
 ###2026.09.25
 - Initial support for DXP4800 GT on Unraid 7.3.2 (kernel 6.18.38-Unraid).
 </CHANGES>
@@ -29,7 +34,7 @@ set -e
 
 <FILE Name="&plugin;/&name;-&version;-x86_64-1.txz" Run="upgradepkg --install-new">
 <URL>&release;/&name;-&version;-x86_64-1.txz</URL>
-<SHA256>9db9056d19649f481d5f56edbb8eafc7db5961c87e4067b887cb85de1cd260c2</SHA256>
+<SHA256>0e291ecc238c18c79eb1ab86edff77d46e7369f9cd1eb41956b38f3a1d79f917</SHA256>
 </FILE>
 
 <FILE Name="&plugin;/settings.example.cfg">
@@ -39,18 +44,36 @@ POWER_COLOR='255 255 255'
 POWER_BRIGHTNESS=180
 NETWORK_INTERFACE=auto
 NETWORK_BRIGHTNESS=180
+NETWORK_COLOR_ONLINE='255 255 255'
+NETWORK_COLOR_OFFLINE='255 165 0'
+CONNECTIVITY_METHOD=https
+CONNECTIVITY_URL='https://unraid.net/'
+CONNECTIVITY_INTERVAL=60
 DISK_COLOR='255 255 255'
+DISK_COLOR_FAILED='255 165 0'
 DISK_BRIGHTNESS=180
 DISK_ATA_PORTS=(1 2 3 4)
 POLL_INTERVAL=0.5
 REFRESH_INTERVAL=15
+DISK_STATUS_INTERVAL=30
 </INLINE>
+<SHA256>ff44121001131bc9a8b6e40f0577b643346733e3bff944365e1855ddbcdf3457</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
 <INLINE>
 set -e
+/usr/local/sbin/ugreen-gt-leds stop 2&gt;/dev/null || true
+flock -w 10 /run/ugreen-gt-leds.lock true
 depmod -a
+if [[ ! -f /boot/config/stop ]]; then
+  printf '#!/bin/bash\n' &gt; /boot/config/stop
+  chmod 755 /boot/config/stop
+  touch &plugin;/stop-created
+fi
+if ! grep -Fq '# ugreen-dxp4800gt-leds' /boot/config/stop; then
+  printf '\n%s\n' '/usr/local/sbin/ugreen-gt-leds shutdown # ugreen-dxp4800gt-leds' &gt;&gt; /boot/config/stop
+fi
 /usr/local/sbin/ugreen-gt-leds start
 sleep 2
 /usr/local/sbin/ugreen-gt-leds status
@@ -61,13 +84,21 @@ sleep 2
 <INLINE>
 /usr/local/sbin/ugreen-gt-leds stop 2&gt;/dev/null || true
 sleep 1
+if [[ -f /boot/config/stop ]]; then
+  sed -i '\@/usr/local/sbin/ugreen-gt-leds shutdown # ugreen-dxp4800gt-leds@d' /boot/config/stop
+  if [[ -f &plugin;/stop-created ]]; then
+    if [[ $(grep -v '^[[:space:]]*$' /boot/config/stop) == '#!/bin/bash' ]]; then
+      rm -f /boot/config/stop
+    fi
+  fi
+fi
 for dev in /sys/bus/i2c/devices/*-003a; do
   [[ -e $dev &amp;&amp; $(cat "$dev/name" 2&gt;/dev/null) == led-ugreen ]] || continue
   bus=${dev##*/}; bus=${bus%-003a}
   printf '0x3a\n' &gt; "/sys/bus/i2c/devices/i2c-$bus/delete_device"
 done
 modprobe -r led-ugreen i2c-designware-platform i2c-designware-core 2&gt;/dev/null || true
-removepkg ugreen-dxp4800gt-leds-2026.09.25-x86_64-1 2&gt;/dev/null || true
+removepkg ugreen-dxp4800gt-leds-2026.09.25.1-x86_64-1 2&gt;/dev/null || true
 rm -rf /boot/config/plugins/ugreen-dxp4800gt-leds
 </INLINE>
 </FILE>

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-version=2026.09.25
+version=2026.09.25.1
 kernel=6.18.38-Unraid
 name=ugreen-dxp4800gt-leds
 stage=$root/build/stage

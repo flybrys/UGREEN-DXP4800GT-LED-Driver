@@ -14,18 +14,18 @@ POWER_COLOR='255 255 255'
 POWER_BRIGHTNESS=180
 NETWORK_INTERFACE=auto
 NETWORK_BRIGHTNESS=180
-NETWORK_COLOR_DOWN='255 0 0'
-NETWORK_COLOR_OTHER='255 165 0'
-NETWORK_COLOR_100='0 255 0'
-NETWORK_COLOR_1000='0 0 255'
-NETWORK_COLOR_2500='255 255 0'
-NETWORK_COLOR_10000='255 255 255'
+NETWORK_COLOR_ONLINE='255 255 255'
+NETWORK_COLOR_OFFLINE='255 165 0'
+CONNECTIVITY_METHOD=https
+CONNECTIVITY_URL='https://unraid.net/'
+CONNECTIVITY_INTERVAL=60
 DISK_COLOR='255 255 255'
-DISK_COLOR_MISSING='255 0 0'
+DISK_COLOR_FAILED='255 165 0'
 DISK_BRIGHTNESS=180
 DISK_ATA_PORTS=(1 2 3 4)
 POLL_INTERVAL=0.5
 REFRESH_INTERVAL=15
+DISK_STATUS_INTERVAL=30
 
 if [[ -f $config_file ]]; then
   # This is an administrator-owned shell configuration file on the boot device.
@@ -115,42 +115,55 @@ pick_network_interface() {
   fi
 }
 
-network_color() {
-  local iface=$1 speed
-  if [[ ! -r /sys/class/net/$iface/carrier ]] ||
-     [[ $(cat "/sys/class/net/$iface/carrier" 2>/dev/null || true) != 1 ]]; then
-    printf '%s\n' "$NETWORK_COLOR_DOWN"
-    return
-  fi
-  speed=$(cat "/sys/class/net/$iface/speed" 2>/dev/null || true)
-  case $speed in
-    100) printf '%s\n' "$NETWORK_COLOR_100" ;;
-    1000) printf '%s\n' "$NETWORK_COLOR_1000" ;;
-    2500) printf '%s\n' "$NETWORK_COLOR_2500" ;;
-    10000) printf '%s\n' "$NETWORK_COLOR_10000" ;;
-    *) printf '%s\n' "$NETWORK_COLOR_OTHER" ;;
+internet_reachable() {
+  local iface=$1 gateway
+  case $CONNECTIVITY_METHOD in
+    https)
+      curl --silent --head --location --output /dev/null --connect-timeout 2 \
+        --max-time 5 --interface "$iface" "$CONNECTIVITY_URL" ;;
+    gateway)
+      gateway=$(ip -4 route show default dev "$iface" | awk 'NR == 1 { print $3 }')
+      [[ -n $gateway ]] && ping -n -c 1 -W 2 -I "$iface" "$gateway" >/dev/null 2>&1 ;;
+    none) return 0 ;;
+    *) fail "Unknown CONNECTIVITY_METHOD: $CONNECTIVITY_METHOD" ;;
   esac
 }
 
 configure_network() {
-  local iface color
+  local iface carrier mode color
   iface=$(pick_network_interface)
   [[ -n $iface && -d /sys/class/net/$iface ]] || fail 'No usable network interface.'
-  color=$(network_color "$iface")
-  if [[ ${current_network_interface:-} != "$iface" ]]; then
+  carrier=$(cat "/sys/class/net/$iface/carrier" 2>/dev/null || true)
+  if [[ $carrier != 1 ]]; then
+    mode=down
+  else
+    if [[ ${current_network_interface:-} != "$iface" ]] ||
+       (( SECONDS >= ${next_connectivity_check:-0} )); then
+      if internet_reachable "$iface"; then
+        network_online=1
+      else
+        network_online=0
+      fi
+      next_connectivity_check=$((SECONDS + CONNECTIVITY_INTERVAL))
+    fi
+    if [[ ${network_online:-0} == 1 ]]; then mode=online; else mode=offline; fi
+  fi
+  if [[ $mode == online ]]; then color=$NETWORK_COLOR_ONLINE; else color=$NETWORK_COLOR_OFFLINE; fi
+  if [[ ${current_network_interface:-} != "$iface" || ${current_network_mode:-} != "$mode" ]]; then
     printf 'none\n' > /sys/class/leds/netdev/trigger
     printf '%s\n' "$color" > /sys/class/leds/netdev/color
     printf '%s\n' "$NETWORK_BRIGHTNESS" > /sys/class/leds/netdev/brightness
-    printf 'netdev\n' > /sys/class/leds/netdev/trigger
-    printf '%s\n' "$iface" > /sys/class/leds/netdev/device_name
-    printf '1\n' > /sys/class/leds/netdev/link
-    printf '1\n' > /sys/class/leds/netdev/tx
-    printf '1\n' > /sys/class/leds/netdev/rx
-    printf '500\n' > /sys/class/leds/netdev/interval
+    if [[ $mode != down ]]; then
+      printf 'netdev\n' > /sys/class/leds/netdev/trigger
+      printf '%s\n' "$iface" > /sys/class/leds/netdev/device_name
+      printf '1\n' > /sys/class/leds/netdev/link
+      printf '1\n' > /sys/class/leds/netdev/tx
+      printf '1\n' > /sys/class/leds/netdev/rx
+      printf '500\n' > /sys/class/leds/netdev/interval
+    fi
     current_network_interface=$iface
-    log "Network LED monitors $iface."
-  elif [[ $(cat /sys/class/leds/netdev/color) != "$color" ]]; then
-    printf '%s\n' "$color" > /sys/class/leds/netdev/color
+    current_network_mode=$mode
+    log "Network LED: $mode on $iface."
   fi
 }
 
@@ -167,7 +180,52 @@ device_on_ata_port() {
   return 1
 }
 
-declare -A bay_device bay_signature bay_seen
+declare -A bay_device bay_signature bay_mode
+
+set_bay_mode() {
+  local bay=$1 mode=$2 path
+  [[ ${bay_mode[$bay]:-} == "$mode" ]] && return 0
+  path=$(led_path "disk$bay")
+  printf 'none\n' > "$path/trigger"
+  printf '%s\n' "$DISK_BRIGHTNESS" > "$path/brightness"
+  case $mode in
+    active)
+      printf 'none\n' > "$path/blink_type"
+      printf '%s\n' "$DISK_COLOR" > "$path/color"
+      printf 'oneshot\n' > "$path/trigger"
+      printf '1\n' > "$path/invert"
+      printf '100\n' > "$path/delay_on"
+      printf '100\n' > "$path/delay_off" ;;
+    standby)
+      printf '%s\n' "$DISK_COLOR" > "$path/color"
+      printf 'breath 1000 1000\n' > "$path/blink_type" ;;
+    failed)
+      printf '%s\n' "$DISK_COLOR_FAILED" > "$path/color"
+      printf 'blink 500 500\n' > "$path/blink_type" ;;
+    *) fail "Unknown disk LED mode: $mode" ;;
+  esac
+  bay_mode[$bay]=$mode
+  log "disk$bay: $mode."
+}
+
+disk_health_mode() {
+  local device=$1 status
+  status=$(smartctl -n standby -H -j "/dev/$device" 2>/dev/null || true)
+  [[ -n $status ]] || { printf 'active\n'; return; }
+  jq -r 'if .power_mode.name == "STANDBY" then "standby"
+         elif .smart_status.passed == false then "failed"
+         else "active" end' <<< "$status" 2>/dev/null || printf 'active\n'
+}
+
+refresh_bay_health() {
+  local bay device mode
+  for bay in 1 2 3 4; do
+    device=${bay_device[$bay]:-}
+    [[ -n $device ]] || continue
+    mode=$(disk_health_mode "$device")
+    set_bay_mode "$bay" "$mode"
+  done
+}
 
 configure_bay() {
   local bay=$1 port=$2 led="disk$1" device path
@@ -176,29 +234,18 @@ configure_bay() {
   device=$(device_on_ata_port "$port" || true)
   if [[ ${bay_device[$bay]-unset} == "$device" ]]; then return 0; fi
   if [[ -n $device ]]; then
-    printf 'none\n' > "$path/trigger"
-    printf '%s\n' "$DISK_COLOR" > "$path/color"
-    printf '%s\n' "$DISK_BRIGHTNESS" > "$path/brightness"
-    printf 'oneshot\n' > "$path/trigger"
-    printf '1\n' > "$path/invert"
-    printf '100\n' > "$path/delay_on"
-    printf '100\n' > "$path/delay_off"
     bay_device[$bay]=$device
-    bay_seen[$bay]=1
+    bay_mode[$bay]=''
     bay_signature[$bay]=''
     log "$led monitors ATA port $port ($device)."
-  elif [[ ${bay_seen[$bay]:-0} == 1 ]]; then
-    printf 'none\n' > "$path/trigger"
-    printf '%s\n' "$DISK_COLOR_MISSING" > "$path/color"
-    printf '%s\n' "$DISK_BRIGHTNESS" > "$path/brightness"
-    bay_device[$bay]=''
-    bay_signature[$bay]=''
-    log "$led: drive on ATA port $port disappeared."
   else
     printf 'none\n' > "$path/trigger"
+    printf 'none\n' > "$path/blink_type"
     printf '0\n' > "$path/brightness"
     bay_device[$bay]=''
+    bay_mode[$bay]=''
     bay_signature[$bay]=''
+    log "$led: ATA port $port is empty."
   fi
 }
 
@@ -212,7 +259,8 @@ poll_disk_activity() {
     signature="${counters[2]}:${counters[6]}"
     path=$(led_path "disk$bay")
     if [[ -n ${bay_signature[$bay]:-} && ${bay_signature[$bay]} != "$signature" ]]; then
-      printf '1\n' > "$path/shot"
+      if [[ ${bay_mode[$bay]:-} == standby ]]; then set_bay_mode "$bay" active; fi
+      if [[ ${bay_mode[$bay]:-} == active ]]; then printf '1\n' > "$path/shot"; fi
       [[ ${UGREEN_GT_DEBUG:-0} == 1 ]] && log "Activity on disk$bay ($device)."
     fi
     bay_signature[$bay]=$signature
@@ -226,10 +274,11 @@ run() {
   trap 'rm -f "$pid_file"' EXIT
   setup_hardware
   printf 'none\n' > /sys/class/leds/power/trigger
+  printf 'none\n' > /sys/class/leds/power/blink_type
   printf '%s\n' "$POWER_COLOR" > /sys/class/leds/power/color
   printf '%s\n' "$POWER_BRIGHTNESS" > /sys/class/leds/power/brightness
   configure_network
-  local bay next_refresh=0
+  local bay next_refresh=0 next_disk_status=0
   while :; do
     if (( SECONDS >= next_refresh )); then
       for bay in 1 2 3 4; do
@@ -237,6 +286,10 @@ run() {
       done
       configure_network
       next_refresh=$((SECONDS + REFRESH_INTERVAL))
+    fi
+    if (( SECONDS >= next_disk_status )); then
+      refresh_bay_health
+      next_disk_status=$((SECONDS + DISK_STATUS_INTERVAL))
     fi
     poll_disk_activity
     sleep "$POLL_INTERVAL"
@@ -258,6 +311,16 @@ case ${1:-} in
       kill "$(cat "$pid_file")" 2>/dev/null || true
     fi
     ;;
+  shutdown)
+    "$0" stop
+    flock -w 10 "$lock_file" true || true
+    if [[ -w /sys/class/leds/power/blink_type ]]; then
+      printf 'none\n' > /sys/class/leds/power/trigger
+      printf '%s\n' "$POWER_COLOR" > /sys/class/leds/power/color
+      printf '%s\n' "$POWER_BRIGHTNESS" > /sys/class/leds/power/brightness
+      printf 'blink 500 500\n' > /sys/class/leds/power/blink_type
+    fi
+    ;;
   status)
     if [[ -r $pid_file ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
       echo 'UGREEN GT LED monitor is running.'
@@ -266,5 +329,5 @@ case ${1:-} in
       exit 1
     fi
     ;;
-  *) echo "Usage: $0 {start|stop|status|run}" >&2; exit 2 ;;
+  *) echo "Usage: $0 {start|stop|shutdown|status|run}" >&2; exit 2 ;;
 esac
