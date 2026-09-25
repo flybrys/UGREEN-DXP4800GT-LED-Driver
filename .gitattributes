@@ -1,6 +1,8 @@
 /.gitattributes text eol=lf
 *.sh text eol=lf
 *.c text eol=lf
+*.php text eol=lf
+*.page text eol=lf
 src/ugreen-gt-leds text eol=lf
 *.cfg text eol=lf
 *.plg text eol=lf

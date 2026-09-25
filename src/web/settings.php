@@ -1,5 +1,9 @@
 <?php
 // SPDX-License-Identifier: MIT
+if (isset($_SERVER['SCRIPT_FILENAME']) && realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) {
+    http_response_code(404);
+    exit;
+}
 require_once __DIR__ . '/settings-lib.php';
 
 $ugreenSettingsPath = '/boot/config/plugins/UGREEN-DXP4800GT-LED-Driver/settings.cfg';

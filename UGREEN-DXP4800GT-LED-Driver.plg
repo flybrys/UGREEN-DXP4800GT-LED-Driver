@@ -50,7 +50,7 @@ set -e
 
 <FILE Name="&plugin;/&package;-&version;-x86_64-1.txz" Run="upgradepkg --install-new">
 <URL>&release;/&package;-&version;-x86_64-1.txz</URL>
-<SHA256>586e4c6cedfc965acb4ac1d24c150f40d6d85ae8b972903c8f6a7e11d280dce8</SHA256>
+<SHA256>874bd3e974974d11835c1f9efc15a9d824eb014c2b12d1c778a5d11e78677b0b</SHA256>
 </FILE>
 
 <FILE Name="&plugin;/settings.example.cfg">

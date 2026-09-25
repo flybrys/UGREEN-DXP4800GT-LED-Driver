@@ -215,30 +215,39 @@ device_on_ata_port() {
 declare -A bay_device bay_signature bay_mode
 
 set_bay_mode() {
-  local bay=$1 mode=$2 path invert
+  local bay=$1 mode=$2 path
   [[ ${bay_mode[$bay]:-} == "$mode" ]] && return 0
   path=$(led_path "disk$bay")
   printf 'none\n' > "$path/trigger"
-  printf '%s\n' "$DISK_BRIGHTNESS" > "$path/brightness"
   case $mode in
     active)
       printf 'none\n' > "$path/blink_type"
-      printf '%s\n' "$DISK_COLOR" > "$path/color"
       case $DISK_ACTIVITY_STYLE in
-        solid) invert=1 ;;
-        dark)
+        solid)
           printf '0\n' > "$path/brightness"
-          invert=0 ;;
+          printf '%s\n' "$DISK_BRIGHTNESS" > "$path/brightness"
+          printf 'oneshot\n' > "$path/trigger"
+          printf '1\n' > "$path/invert"
+          printf '1\n' > "$path/delay_on"
+          printf '%s\n' "$DISK_PULSE_MS" > "$path/delay_off"
+          printf '%s\n' "$DISK_COLOR" > "$path/color"
+          printf '%s\n' "$DISK_BRIGHTNESS" > "$path/brightness"
+          printf 'none\n' > "$path/blink_type" ;;
+        dark)
+          printf '%s\n' "$DISK_COLOR" > "$path/color"
+          printf '0\n' > "$path/brightness"
+          printf 'oneshot\n' > "$path/trigger"
+          printf '0\n' > "$path/invert"
+          printf '%s\n' "$DISK_PULSE_MS" > "$path/delay_on"
+          printf '100\n' > "$path/delay_off" ;;
         *) fail "Unknown DISK_ACTIVITY_STYLE: $DISK_ACTIVITY_STYLE" ;;
-      esac
-      printf 'oneshot\n' > "$path/trigger"
-      printf '%s\n' "$invert" > "$path/invert"
-      printf '%s\n' "$DISK_PULSE_MS" > "$path/delay_on"
-      printf '100\n' > "$path/delay_off" ;;
+      esac ;;
     standby)
+      printf '%s\n' "$DISK_BRIGHTNESS" > "$path/brightness"
       printf '%s\n' "$DISK_COLOR" > "$path/color"
       printf 'breath 1000 1000\n' > "$path/blink_type" ;;
     failed)
+      printf '%s\n' "$DISK_BRIGHTNESS" > "$path/brightness"
       printf '%s\n' "$DISK_COLOR_FAILED" > "$path/color"
       printf 'blink 500 500\n' > "$path/blink_type" ;;
     *) fail "Unknown disk LED mode: $mode" ;;
@@ -294,7 +303,8 @@ poll_disk_activity() {
   for bay in 1 2 3 4; do
     device=${bay_device[$bay]:-}
     [[ -n $device && -r /sys/class/block/$device/stat ]] || continue
-    read -r -a counters < "/sys/class/block/$device/stat"
+    read -r -a counters < "/sys/class/block/$device/stat" || continue
+    (( ${#counters[@]} >= 7 )) || continue
     signature="${counters[2]}:${counters[6]}"
     path=$(led_path "disk$bay")
     if [[ -n ${bay_signature[$bay]:-} && ${bay_signature[$bay]} != "$signature" ]]; then
