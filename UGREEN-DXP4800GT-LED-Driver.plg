@@ -2,14 +2,18 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name "UGREEN-DXP4800GT-LED-Driver">
   <!ENTITY package "ugreen-dxp4800gt-leds">
-  <!ENTITY version "2026.09.25.4dev2">
+  <!ENTITY version "2026.09.25.4dev3">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY release "https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver/releases/download/v&version;">
 ]>
 <PLUGIN name="&name;" author="flybrys" version="&version;" icon="lightbulb-o"
+        launch="Settings/UGREEN-DXP4800GT-LED-Driver"
         pluginURL="https://raw.githubusercontent.com/flybrys/UGREEN-DXP4800GT-LED-Driver/dev/UGREEN-DXP4800GT-LED-Driver.plg"
         min="7.3.2" support="https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver/issues">
 <CHANGES>
+###2026.09.25.4dev3
+- Link the Plugins page icon to the LED settings page.
+
 ###2026.09.25.4dev2
 - Render the settings form directly as HTML in Unraid's page layout.
 
@@ -53,7 +57,7 @@ set -e
 
 <FILE Name="&plugin;/&package;-&version;-x86_64-1.txz" Run="upgradepkg --install-new">
 <URL>&release;/&package;-&version;-x86_64-1.txz</URL>
-<SHA256>24937cbdade48309afabf50dd3088dc74b8c31b22ea73dc23691225475639230</SHA256>
+<SHA256>b43aee212f11fa9be7e65080b0cc2843cd6ebe9d884ebd1d464ce201a194a3d9</SHA256>
 </FILE>
 
 <FILE Name="&plugin;/settings.example.cfg">

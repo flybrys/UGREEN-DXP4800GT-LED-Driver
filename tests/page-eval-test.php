@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MIT
 // Run on Unraid after installing the package.
 $path = '/usr/local/emhttp/plugins/UGREEN-DXP4800GT-LED-Driver/UGREEN-DXP4800GT-LED-Driver.page';
+$plugin = '/boot/config/plugins/UGREEN-DXP4800GT-LED-Driver.plg';
+$manifest = file_get_contents($plugin);
+if ($manifest === false ||
+    !str_contains($manifest, 'launch="Settings/UGREEN-DXP4800GT-LED-Driver"')) {
+    throw new RuntimeException('Plugin icon must launch the settings page.');
+}
 $page = file_get_contents($path);
 if ($page === false || !str_contains($page, "\n---\n") ||
     !str_contains($page, 'Markdown="false"')) {
