@@ -2,15 +2,18 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name "UGREEN-DXP4800GT-LED-Driver">
   <!ENTITY package "ugreen-dxp4800gt-leds">
-  <!ENTITY version "2026.09.25.4">
+  <!ENTITY version "2026.09.25.5dev1">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY release "https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver/releases/download/v&version;">
 ]>
 <PLUGIN name="&name;" author="flybrys" version="&version;" icon="lightbulb-o"
         launch="Settings/UGREEN-DXP4800GT-LED-Driver"
-        pluginURL="https://raw.githubusercontent.com/flybrys/UGREEN-DXP4800GT-LED-Driver/main/UGREEN-DXP4800GT-LED-Driver.plg"
+        pluginURL="https://raw.githubusercontent.com/flybrys/UGREEN-DXP4800GT-LED-Driver/dev/UGREEN-DXP4800GT-LED-Driver.plg"
         min="7.3.2" support="https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver/issues">
 <CHANGES>
+###2026.09.25.5dev1
+- Force the power LED off then on during startup so it lights after reboot.
+
 ###2026.09.25.4
 - Keep active drive LEDs solid between per-drive I/O events, with brief off pulses.
 - Add a native Unraid settings page with colour pickers and validated controls.
@@ -52,7 +55,7 @@ set -e
 
 <FILE Name="&plugin;/&package;-&version;-x86_64-1.txz" Run="upgradepkg --install-new">
 <URL>&release;/&package;-&version;-x86_64-1.txz</URL>
-<SHA256>6a1896a1de378b5da7d920a139f911d95662ce345ff4dde8a5a23a4a79e05cff</SHA256>
+<SHA256>65b1d269fff1c23a71e39a3088d281d57315407169db6a5e0ebb9bb2059dbde8</SHA256>
 </FILE>
 
 <FILE Name="&plugin;/settings.example.cfg">

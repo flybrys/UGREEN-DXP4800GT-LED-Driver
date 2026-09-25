@@ -354,6 +354,10 @@ run() {
   printf 'none\n' > /sys/class/leds/power/trigger
   printf 'none\n' > /sys/class/leds/power/blink_type
   printf '%s\n' "$POWER_COLOR" > /sys/class/leds/power/color
+  # The MCU can report "on" after boot while the physical power LED is dark.
+  # Cycle it so the driver sends an explicit on command instead of skipping it.
+  printf '0\n' > /sys/class/leds/power/brightness
+  sleep 0.1
   printf '%s\n' "$POWER_BRIGHTNESS" > /sys/class/leds/power/brightness
   configure_network
   local bay next_refresh=0 next_disk_status=0
