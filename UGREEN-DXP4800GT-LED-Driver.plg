@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name "UGREEN-DXP4800GT-LED-Driver">
   <!ENTITY package "ugreen-dxp4800gt-leds">
-  <!ENTITY version "2026.09.25.4dev1">
+  <!ENTITY version "2026.09.25.4dev2">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY release "https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver/releases/download/v&version;">
 ]>
@@ -10,6 +10,9 @@
         pluginURL="https://raw.githubusercontent.com/flybrys/UGREEN-DXP4800GT-LED-Driver/dev/UGREEN-DXP4800GT-LED-Driver.plg"
         min="7.3.2" support="https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver/issues">
 <CHANGES>
+###2026.09.25.4dev2
+- Render the settings form directly as HTML in Unraid's page layout.
+
 ###2026.09.25.4dev1
 - Keep active drive LEDs solid between per-drive I/O events, with brief off pulses.
 - Add a native Unraid settings page with colour pickers and validated controls.
@@ -50,7 +53,7 @@ set -e
 
 <FILE Name="&plugin;/&package;-&version;-x86_64-1.txz" Run="upgradepkg --install-new">
 <URL>&release;/&package;-&version;-x86_64-1.txz</URL>
-<SHA256>81f8d97f2345031a78a80b2772018b8484ac732122dda129c5448c883e145d11</SHA256>
+<SHA256>24937cbdade48309afabf50dd3088dc74b8c31b22ea73dc23691225475639230</SHA256>
 </FILE>
 
 <FILE Name="&plugin;/settings.example.cfg">
