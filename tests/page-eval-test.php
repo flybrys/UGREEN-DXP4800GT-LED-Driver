@@ -24,4 +24,13 @@ if (substr_count($html, 'type="color"') !== 5 ||
     !str_contains($html, 'value="test-token"')) {
     throw new RuntimeException('Installed settings page did not render its controls.');
 }
+$_GET['init'] = '1';
+$_SERVER['DOCUMENT_ROOT'] = '/usr/local/emhttp';
+ob_start();
+require '/usr/local/emhttp/plugins/dynamix.plugin.manager/include/ShowPlugins.php';
+$listing = ob_get_clean();
+if (!str_contains($listing,
+    "<a href='/Settings/UGREEN-DXP4800GT-LED-Driver' class='list'>")) {
+    throw new RuntimeException('Plugins page icon is not linked to LED settings.');
+}
 echo "Installed Unraid page evaluation passed.\n";
