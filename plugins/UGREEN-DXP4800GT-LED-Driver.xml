@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Plugin>
+  <Name>UGREEN DXP4800GT LED Driver</Name>
+  <PluginURL>https://raw.githubusercontent.com/flybrys/UGREEN-DXP4800GT-LED-Driver/main/UGREEN-DXP4800GT-LED-Driver.plg</PluginURL>
+  <Support>https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver/issues</Support>
+  <Project>https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver</Project>
+  <Overview>Restores the DXP4800 GT front-panel power, LAN, and drive LEDs on Unraid 7.3.2 (kernel 6.18.38-Unraid). Shows internet reachability, meaningful network and disk activity, drive standby, and explicit SMART failure.</Overview>
+  <Category>Tools:Utilities</Category>
+  <Icon>https://raw.githubusercontent.com/flybrys/UGREEN-DXP4800GT-LED-Driver/main/icon.svg</Icon>
+  <ReadMe>https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver#readme</ReadMe>
+  <MinVer>7.3.2</MinVer>
+  <MaxVer>7.3.2</MaxVer>
+</Plugin>

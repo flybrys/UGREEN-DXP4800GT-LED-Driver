@@ -1,8 +1,15 @@
+/.gitattributes text eol=lf
 *.sh text eol=lf
 src/ugreen-gt-leds text eol=lf
 *.cfg text eol=lf
 *.plg text eol=lf
+*.xml text eol=lf
+*.svg text eol=lf
+*.patch text eol=lf whitespace=-blank-at-eol
 *.md text eol=lf
+*.sha256 text eol=lf
+*.md5 text eol=lf
+dist/**/BUILD_INFO text eol=lf
+dist/**/SHA256SUMS text eol=lf
 *.ko binary
 *.txz binary
-dist/6.18.38-Unraid/ugreen_leds_cli binary

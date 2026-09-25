@@ -4,7 +4,7 @@ set -Eeuo pipefail
 # UGREEN DXP4800 GT front-panel LEDs for Unraid.
 # The kernel modules are distributed separately for each exact Unraid kernel.
 
-plugin_dir=/boot/config/plugins/ugreen-dxp4800gt-leds
+plugin_dir=/boot/config/plugins/UGREEN-DXP4800GT-LED-Driver
 config_file=${UGREEN_GT_CONFIG:-$plugin_dir/settings.cfg}
 pid_file=${UGREEN_GT_PID_FILE:-/run/ugreen-gt-leds.pid}
 lock_file=${UGREEN_GT_LOCK_FILE:-/run/ugreen-gt-leds.lock}
@@ -18,7 +18,9 @@ NETWORK_COLOR_ONLINE='255 255 255'
 NETWORK_COLOR_OFFLINE='255 165 0'
 CONNECTIVITY_METHOD=https
 CONNECTIVITY_URL='https://unraid.net/'
+CONNECTIVITY_FALLBACK_URL='https://ai.ugreen.com/'
 CONNECTIVITY_INTERVAL=60
+NETWORK_ACTIVITY_BYTES=65536
 DISK_COLOR='255 255 255'
 DISK_COLOR_FAILED='255 165 0'
 DISK_BRIGHTNESS=180
@@ -87,7 +89,6 @@ setup_hardware() {
   load_module i2c-dev i2c-dev.ko
   load_module i2c-designware-core i2c-designware-core.ko
   load_module i2c-designware-platform i2c-designware-platform.ko
-  load_module ledtrig-netdev ledtrig-netdev.ko
   load_module ledtrig-oneshot ledtrig-oneshot.ko
   if module_loaded led_ugreen; then
     [[ -r /sys/module/led_ugreen/parameters/write_protocol ]] ||
@@ -115,12 +116,19 @@ pick_network_interface() {
   fi
 }
 
+https_reachable() {
+  local iface=$1 url=$2
+  [[ -n $url ]] || return 1
+  curl --silent --fail --head --location --output /dev/null --connect-timeout 2 \
+    --max-time 5 --interface "$iface" "$url"
+}
+
 internet_reachable() {
   local iface=$1 gateway
   case $CONNECTIVITY_METHOD in
     https)
-      curl --silent --head --location --output /dev/null --connect-timeout 2 \
-        --max-time 5 --interface "$iface" "$CONNECTIVITY_URL" ;;
+      https_reachable "$iface" "$CONNECTIVITY_URL" ||
+        https_reachable "$iface" "$CONNECTIVITY_FALLBACK_URL" ;;
     gateway)
       gateway=$(ip -4 route show default dev "$iface" | awk 'NR == 1 { print $3 }')
       [[ -n $gateway ]] && ping -n -c 1 -W 2 -I "$iface" "$gateway" >/dev/null 2>&1 ;;
@@ -132,8 +140,11 @@ internet_reachable() {
 configure_network() {
   local iface carrier mode color
   iface=$(pick_network_interface)
-  [[ -n $iface && -d /sys/class/net/$iface ]] || fail 'No usable network interface.'
-  carrier=$(cat "/sys/class/net/$iface/carrier" 2>/dev/null || true)
+  if [[ -n $iface && -d /sys/class/net/$iface ]]; then
+    carrier=$(cat "/sys/class/net/$iface/carrier" 2>/dev/null || true)
+  else
+    carrier=0
+  fi
   if [[ $carrier != 1 ]]; then
     mode=down
   else
@@ -151,20 +162,39 @@ configure_network() {
   if [[ $mode == online ]]; then color=$NETWORK_COLOR_ONLINE; else color=$NETWORK_COLOR_OFFLINE; fi
   if [[ ${current_network_interface:-} != "$iface" || ${current_network_mode:-} != "$mode" ]]; then
     printf 'none\n' > /sys/class/leds/netdev/trigger
+    printf 'none\n' > /sys/class/leds/netdev/blink_type
     printf '%s\n' "$color" > /sys/class/leds/netdev/color
     printf '%s\n' "$NETWORK_BRIGHTNESS" > /sys/class/leds/netdev/brightness
     if [[ $mode != down ]]; then
-      printf 'netdev\n' > /sys/class/leds/netdev/trigger
-      printf '%s\n' "$iface" > /sys/class/leds/netdev/device_name
-      printf '1\n' > /sys/class/leds/netdev/link
-      printf '1\n' > /sys/class/leds/netdev/tx
-      printf '1\n' > /sys/class/leds/netdev/rx
-      printf '500\n' > /sys/class/leds/netdev/interval
+      printf 'oneshot\n' > /sys/class/leds/netdev/trigger
+      printf '1\n' > /sys/class/leds/netdev/invert
+      printf '100\n' > /sys/class/leds/netdev/delay_on
+      printf '100\n' > /sys/class/leds/netdev/delay_off
     fi
     current_network_interface=$iface
     current_network_mode=$mode
+    network_rx_bytes=''
+    network_tx_bytes=''
     log "Network LED: $mode on $iface."
   fi
+}
+
+poll_network_activity() {
+  local iface=${current_network_interface:-} rx tx delta
+  [[ ${current_network_mode:-down} != down && -n $iface ]] || return 0
+  [[ -r /sys/class/net/$iface/statistics/rx_bytes &&
+     -r /sys/class/net/$iface/statistics/tx_bytes ]] || return 0
+  read -r rx < "/sys/class/net/$iface/statistics/rx_bytes" || return 0
+  read -r tx < "/sys/class/net/$iface/statistics/tx_bytes" || return 0
+  if [[ -n ${network_rx_bytes:-} && -n ${network_tx_bytes:-} ]]; then
+    delta=$((rx - network_rx_bytes + tx - network_tx_bytes))
+    if (( delta >= NETWORK_ACTIVITY_BYTES )); then
+      printf '1\n' > /sys/class/leds/netdev/shot
+      [[ ${UGREEN_GT_DEBUG:-0} == 1 ]] && log "Network activity: $delta bytes on $iface."
+    fi
+  fi
+  network_rx_bytes=$rx
+  network_tx_bytes=$tx
 }
 
 device_on_ata_port() {
@@ -292,14 +322,27 @@ run() {
       next_disk_status=$((SECONDS + DISK_STATUS_INTERVAL))
     fi
     poll_disk_activity
+    poll_network_activity
     sleep "$POLL_INTERVAL"
   done
+}
+
+running_pid() {
+  local pid
+  local -a argv=()
+  [[ -r $pid_file ]] || return 1
+  read -r pid < "$pid_file" || return 1
+  [[ $pid =~ ^[0-9]+$ && -r /proc/$pid/cmdline ]] || return 1
+  mapfile -d '' -t argv < "/proc/$pid/cmdline" || return 1
+  [[ ${argv[1]:-} == "$0" && ${argv[2]:-} == run ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  printf '%s\n' "$pid"
 }
 
 case ${1:-} in
   run) run ;;
   start)
-    if [[ -r $pid_file ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+    if running_pid >/dev/null; then
       echo 'UGREEN GT LED monitor is already running.'
       exit 0
     fi
@@ -307,9 +350,7 @@ case ${1:-} in
     echo "UGREEN GT LED monitor started as PID $!."
     ;;
   stop)
-    if [[ -r $pid_file ]]; then
-      kill "$(cat "$pid_file")" 2>/dev/null || true
-    fi
+    pid=$(running_pid) && kill "$pid" 2>/dev/null || true
     ;;
   shutdown)
     "$0" stop
@@ -322,7 +363,7 @@ case ${1:-} in
     fi
     ;;
   status)
-    if [[ -r $pid_file ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+    if running_pid >/dev/null; then
       echo 'UGREEN GT LED monitor is running.'
     else
       echo 'UGREEN GT LED monitor is stopped.'

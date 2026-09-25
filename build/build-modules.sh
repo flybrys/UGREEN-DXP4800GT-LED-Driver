@@ -13,9 +13,10 @@ led_commit=c830a2293cf5c67c58e5a98ca339b089b2b13fc3
 archive="$root_dir/sources/linux-$kernel_release.tar.xz"
 kernel_dir="$root_dir/work/linux-$kernel_release"
 led_dir="$root_dir/sources/ugreen_leds_controller"
+led_patch="$root_dir/patches/led-ugreen-hardening.patch"
 dist_dir="$root_dir/dist/$kernel_release"
 
-for tool in sha256sum git tar make gcc g++ modinfo; do
+for tool in sha256sum git tar make gcc g++ modinfo bc flex bison; do
   command -v "$tool" >/dev/null || { echo "Missing build tool: $tool" >&2; exit 1; }
 done
 [[ $(uname -m) == x86_64 ]] || {
@@ -33,6 +34,9 @@ if ! git -C "$led_dir" diff --quiet -- kmod cli || \
    ! git -C "$led_dir" diff --cached --quiet -- kmod cli; then
   echo 'LED module or CLI source was modified' >&2; exit 1;
 fi
+git -C "$led_dir" apply --check "$led_patch"
+git -C "$led_dir" apply "$led_patch"
+git -C "$led_dir" diff --check
 
 if [[ ! -f "$kernel_dir/Makefile" ]]; then
   mkdir -p "$kernel_dir"
@@ -56,8 +60,6 @@ jobs=${JOBS:-$(nproc)}
 make -C "$kernel_dir" -j"$jobs" M=drivers/i2c/busses \
   CONFIG_I2C_DESIGNWARE_CORE=m CONFIG_I2C_DESIGNWARE_PLATFORM=m modules
 make -C "$kernel_dir" -j"$jobs" M="$led_dir/kmod" modules
-make -C "$led_dir/cli" -j"$jobs" ugreen_leds_cli
-
 mkdir -p "$dist_dir"
 for module in \
   "$kernel_dir/drivers/i2c/busses/i2c-designware-core.ko" \
@@ -70,11 +72,11 @@ for module in \
   }
   cp "$module" "$dist_dir/"
 done
-cp "$led_dir/cli/ugreen_leds_cli" "$dist_dir/"
 (
   cd "$dist_dir"
-  sha256sum *.ko ugreen_leds_cli > SHA256SUMS
-  printf 'kernel=%s\nled_source=%s\nkernel_archive_sha256=%s\n' \
-    "$kernel_release" "$led_commit" "$kernel_sha256" > BUILD_INFO
+  sha256sum *.ko > SHA256SUMS
+  printf 'kernel=%s\nled_source=%s\nkernel_archive_sha256=%s\nled_patch_sha256=%s\n' \
+    "$kernel_release" "$led_commit" "$kernel_sha256" \
+    "$(sha256sum "$led_patch" | awk '{print $1}')" > BUILD_INFO
 )
 echo "Build complete: $dist_dir"

@@ -1,14 +1,21 @@
 <?xml version="1.0" standalone="yes"?>
 <!DOCTYPE PLUGIN [
-  <!ENTITY name "ugreen-dxp4800gt-leds">
-  <!ENTITY version "2026.09.25.1">
+  <!ENTITY name "UGREEN-DXP4800GT-LED-Driver">
+  <!ENTITY package "ugreen-dxp4800gt-leds">
+  <!ENTITY version "2026.09.25.2">
   <!ENTITY plugin "/boot/config/plugins/&name;">
-  <!ENTITY release "https://github.com/flybrys/unraid-ugreen-dxp4800gt-leds/releases/download/v&version;">
+  <!ENTITY release "https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver/releases/download/v&version;">
 ]>
 <PLUGIN name="&name;" author="flybrys" version="&version;"
-        pluginURL="https://raw.githubusercontent.com/flybrys/unraid-ugreen-dxp4800gt-leds/main/ugreen-dxp4800gt-leds.plg"
-        min="7.3.2" support="https://github.com/flybrys/unraid-ugreen-dxp4800gt-leds/issues">
+        pluginURL="https://raw.githubusercontent.com/flybrys/UGREEN-DXP4800GT-LED-Driver/main/UGREEN-DXP4800GT-LED-Driver.plg"
+        min="7.3.2" support="https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver/issues">
 <CHANGES>
+###2026.09.25.2
+- Keep the LAN LED steady during background traffic; flash for larger transfers.
+- Check UGREEN's site if unraid.net is unavailable.
+- Keep monitoring disks and power when the default network route disappears.
+- Harden process control and LED driver error handling.
+
 ###2026.09.25.1
 - Use UGREEN's white/orange LAN meanings instead of link-speed colors.
 - Breathe white for standby drives and blink orange for explicit SMART failure.
@@ -23,6 +30,7 @@
 set -e
 [[ $(uname -r) == 6.18.38-Unraid ]] || { echo 'Unsupported kernel; exact matching modules are required.' &gt;&amp;2; exit 1; }
 [[ $(cat /sys/class/dmi/id/product_name) == 'DXP4800 GT' ]] || { echo 'DXP4800 GT required.' &gt;&amp;2; exit 1; }
+[[ ! -f /boot/config/plugins/ugreen-dxp4800gt-leds.plg ]] || { echo 'Remove the earlier plugin release before installing this renamed plugin.' &gt;&amp;2; exit 1; }
 [[ ! -f /boot/config/plugins/ugreenleds-driver.plg ]] || { echo 'Remove the old ugreenleds-driver plugin first.' &gt;&amp;2; exit 1; }
 </INLINE>
 </FILE>
@@ -32,9 +40,9 @@ set -e
 <SHA256>9730e890d81743f4827715ae38019715fe8252c9bc6d95af4b5f64339238106c</SHA256>
 </FILE>
 
-<FILE Name="&plugin;/&name;-&version;-x86_64-1.txz" Run="upgradepkg --install-new">
-<URL>&release;/&name;-&version;-x86_64-1.txz</URL>
-<SHA256>0e291ecc238c18c79eb1ab86edff77d46e7369f9cd1eb41956b38f3a1d79f917</SHA256>
+<FILE Name="&plugin;/&package;-&version;-x86_64-1.txz" Run="upgradepkg --install-new">
+<URL>&release;/&package;-&version;-x86_64-1.txz</URL>
+<SHA256>7583a45bece3ba43948d760ac8677fea75b2f6e46157fdd0ab97e65fa0678311</SHA256>
 </FILE>
 
 <FILE Name="&plugin;/settings.example.cfg">
@@ -48,7 +56,9 @@ NETWORK_COLOR_ONLINE='255 255 255'
 NETWORK_COLOR_OFFLINE='255 165 0'
 CONNECTIVITY_METHOD=https
 CONNECTIVITY_URL='https://unraid.net/'
+CONNECTIVITY_FALLBACK_URL='https://ai.ugreen.com/'
 CONNECTIVITY_INTERVAL=60
+NETWORK_ACTIVITY_BYTES=65536
 DISK_COLOR='255 255 255'
 DISK_COLOR_FAILED='255 165 0'
 DISK_BRIGHTNESS=180
@@ -57,7 +67,7 @@ POLL_INTERVAL=0.5
 REFRESH_INTERVAL=15
 DISK_STATUS_INTERVAL=30
 </INLINE>
-<SHA256>ff44121001131bc9a8b6e40f0577b643346733e3bff944365e1855ddbcdf3457</SHA256>
+<SHA256>522d2bf20e9e0c9ce1ab406b0134a962cc71e189e31f98402b29d5af668ef5cb</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
@@ -71,8 +81,8 @@ if [[ ! -f /boot/config/stop ]]; then
   chmod 755 /boot/config/stop
   touch &plugin;/stop-created
 fi
-if ! grep -Fq '# ugreen-dxp4800gt-leds' /boot/config/stop; then
-  printf '\n%s\n' '/usr/local/sbin/ugreen-gt-leds shutdown # ugreen-dxp4800gt-leds' &gt;&gt; /boot/config/stop
+if ! grep -Fq '# UGREEN-DXP4800GT-LED-Driver' /boot/config/stop; then
+  printf '\n%s\n' '/usr/local/sbin/ugreen-gt-leds shutdown # UGREEN-DXP4800GT-LED-Driver' &gt;&gt; /boot/config/stop
 fi
 /usr/local/sbin/ugreen-gt-leds start
 sleep 2
@@ -85,7 +95,7 @@ sleep 2
 /usr/local/sbin/ugreen-gt-leds stop 2&gt;/dev/null || true
 sleep 1
 if [[ -f /boot/config/stop ]]; then
-  sed -i '\@/usr/local/sbin/ugreen-gt-leds shutdown # ugreen-dxp4800gt-leds@d' /boot/config/stop
+  sed -i '\@/usr/local/sbin/ugreen-gt-leds shutdown # UGREEN-DXP4800GT-LED-Driver@d' /boot/config/stop
   if [[ -f &plugin;/stop-created ]]; then
     if [[ $(grep -v '^[[:space:]]*$' /boot/config/stop) == '#!/bin/bash' ]]; then
       rm -f /boot/config/stop
@@ -98,8 +108,8 @@ for dev in /sys/bus/i2c/devices/*-003a; do
   printf '0x3a\n' &gt; "/sys/bus/i2c/devices/i2c-$bus/delete_device"
 done
 modprobe -r led-ugreen i2c-designware-platform i2c-designware-core 2&gt;/dev/null || true
-removepkg ugreen-dxp4800gt-leds-2026.09.25.1-x86_64-1 2&gt;/dev/null || true
-rm -rf /boot/config/plugins/ugreen-dxp4800gt-leds
+removepkg &package;-&version;-x86_64-1 2&gt;/dev/null || true
+rm -rf &plugin;
 </INLINE>
 </FILE>
 </PLUGIN>

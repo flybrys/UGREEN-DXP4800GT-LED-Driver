@@ -1,3 +1,4 @@
 kernel=6.18.38-Unraid
 led_source=c830a2293cf5c67c58e5a98ca339b089b2b13fc3
 kernel_archive_sha256=b336c66bf1d7ee2cedba88e8be2124b2256c94476b1d1c944518ce8d6bcf37da
+led_patch_sha256=13ad890c3168fb810f15e9e8ddb6cb732d801ef8c68ce2da9f1e7eb33e56fd7f

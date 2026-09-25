@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-version=2026.09.25.1
+version=2026.09.25.2
 kernel=6.18.38-Unraid
 name=ugreen-dxp4800gt-leds
 stage=$root/build/stage
@@ -22,7 +22,7 @@ cat > "$stage/install/slack-desc" <<EOF
 $name: $name (UGREEN DXP4800 GT front-panel LED support)
 $name:
 $name: Matching I2C and LED modules for Unraid kernel $kernel.
-$name: See https://github.com/flybrys/unraid-ugreen-dxp4800gt-leds
+$name: See https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver
 EOF
 mkdir -p "$root/artifacts"
 (cd "$stage" && makepkg -l y -c n "$package")

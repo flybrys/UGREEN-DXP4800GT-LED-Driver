@@ -1,0 +1,58 @@
+diff --git a/kmod/led-ugreen.c b/kmod/led-ugreen.c
+--- a/kmod/led-ugreen.c
++++ b/kmod/led-ugreen.c
+@@ -170,9 +170,9 @@ static int ugreen_led_get_state(
+     u8 buf[11];
+     s32 rc = i2c_smbus_read_i2c_block_data(client, 0x81 + led_id, 11, (u8 *)buf);
+ 
+     // check the return code
+-    if (rc < 0) {
++    if (rc != sizeof(buf)) {
+         pr_err("%s: i2c_smbus_read_i2c_block_data failed with id %d, err %d", 
+                 __func__, led_id, rc);
+-        return rc;
++        return rc < 0 ? rc : -EIO;
+     }
+@@ -525,5 +525,5 @@ static ssize_t status_show(struct device *dev, struct device_attribute *attr, char *buf) {
+         status = UGREEN_LED_STATE_INVALID;
+     }
+     ssize_t size = sprintf(buf, "%s %d %d %d %d %d %d\n", 
+-            ugreen_led_state_name[state.status], (int)state.brightness, 
++            ugreen_led_state_name[status], (int)state.brightness,
+             (int)state.r, (int)state.g, (int)state.b,
+@@ -652,5 +652,15 @@ static int ugreen_led_probe(struct i2c_client *client) {
+             state->cdev.default_trigger = "oneshot";
+         }
+ 
+-        led_classdev_register(&client->dev, &state->cdev);
++        int rc = led_classdev_register(&client->dev, &state->cdev);
++        if (rc) {
++            mutex_unlock(&priv->mutex);
++            for (int j = 0; j < probe_limit; ++j) {
++                if (priv->state[j].registered)
++                    led_classdev_unregister(&priv->state[j].cdev);
++            }
++            mutex_destroy(&priv->mutex);
++            return rc;
++        }
++        state->registered = true;
+     }
+@@ -672,7 +682,7 @@ ugreen_led_remove(struct i2c_client *client) {
+     for (int i = 0; i < UGREEN_MAX_LED_NUMBER; ++i) {
+ 
+         struct ugreen_led_state *state = priv->state + i;
+-        if (state->status == UGREEN_LED_STATE_INVALID)
++        if (!state->registered)
+             continue;
+ 
+         led_classdev_unregister(&state->cdev);
+diff --git a/kmod/led-ugreen.h b/kmod/led-ugreen.h
+--- a/kmod/led-ugreen.h
++++ b/kmod/led-ugreen.h
+@@ -38,5 +38,6 @@ struct ugreen_led_state {
+ 
+     u8 led_id;
+     struct led_classdev cdev;
++    bool registered;
+     struct ugreen_led_array *priv;
+ };

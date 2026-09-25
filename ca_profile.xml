@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CommunityApplications>
+  <Profile>UGREEN DXP4800GT LED Driver provides power, LAN, and drive-bay indicator support for the UGREEN NASync DXP4800 GT running a supported Unraid kernel. For help or bug reports, use the GitHub issues page linked from the plugin listing.</Profile>
+  <Icon>https://raw.githubusercontent.com/flybrys/UGREEN-DXP4800GT-LED-Driver/main/icon.svg</Icon>
+  <WebPage>https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver</WebPage>
+</CommunityApplications>
