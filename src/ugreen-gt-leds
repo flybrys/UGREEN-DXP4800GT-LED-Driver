@@ -24,6 +24,7 @@ NETWORK_ACTIVITY_BYTES=65536
 DISK_COLOR='255 255 255'
 DISK_COLOR_FAILED='255 165 0'
 DISK_BRIGHTNESS=180
+DISK_ACTIVITY_STYLE=solid
 DISK_PULSE_MS=80
 DISK_ATA_PORTS=(1 2 3 4)
 POLL_INTERVAL=0.5
@@ -214,7 +215,7 @@ device_on_ata_port() {
 declare -A bay_device bay_signature bay_mode
 
 set_bay_mode() {
-  local bay=$1 mode=$2 path
+  local bay=$1 mode=$2 path invert
   [[ ${bay_mode[$bay]:-} == "$mode" ]] && return 0
   path=$(led_path "disk$bay")
   printf 'none\n' > "$path/trigger"
@@ -223,11 +224,15 @@ set_bay_mode() {
     active)
       printf 'none\n' > "$path/blink_type"
       printf '%s\n' "$DISK_COLOR" > "$path/color"
-      # The one-shot trigger uses the LED's current state as its idle state.
-      # Start from off so each block request lights the LED briefly.
-      printf '0\n' > "$path/brightness"
+      case $DISK_ACTIVITY_STYLE in
+        solid) invert=1 ;;
+        dark)
+          printf '0\n' > "$path/brightness"
+          invert=0 ;;
+        *) fail "Unknown DISK_ACTIVITY_STYLE: $DISK_ACTIVITY_STYLE" ;;
+      esac
       printf 'oneshot\n' > "$path/trigger"
-      printf '0\n' > "$path/invert"
+      printf '%s\n' "$invert" > "$path/invert"
       printf '%s\n' "$DISK_PULSE_MS" > "$path/delay_on"
       printf '100\n' > "$path/delay_off" ;;
     standby)

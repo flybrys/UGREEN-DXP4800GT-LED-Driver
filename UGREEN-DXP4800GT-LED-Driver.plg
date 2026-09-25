@@ -2,14 +2,18 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name "UGREEN-DXP4800GT-LED-Driver">
   <!ENTITY package "ugreen-dxp4800gt-leds">
-  <!ENTITY version "2026.09.25.3">
+  <!ENTITY version "2026.09.25.4-dev.1">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY release "https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver/releases/download/v&version;">
 ]>
 <PLUGIN name="&name;" author="flybrys" version="&version;" icon="lightbulb-o"
-        pluginURL="https://raw.githubusercontent.com/flybrys/UGREEN-DXP4800GT-LED-Driver/main/UGREEN-DXP4800GT-LED-Driver.plg"
+        pluginURL="https://raw.githubusercontent.com/flybrys/UGREEN-DXP4800GT-LED-Driver/dev/UGREEN-DXP4800GT-LED-Driver.plg"
         min="7.3.2" support="https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver/issues">
 <CHANGES>
+###2026.09.25.4-dev.1
+- Keep active drive LEDs solid between per-drive I/O events, with brief off pulses.
+- Add a native Unraid settings page with colour pickers and validated controls.
+
 ###2026.09.25.3
 - Drive LEDs respond to individual read and write requests and stay dark while idle.
 - Show a light icon and readable description on Unraid's Plugins page.
@@ -46,7 +50,7 @@ set -e
 
 <FILE Name="&plugin;/&package;-&version;-x86_64-1.txz" Run="upgradepkg --install-new">
 <URL>&release;/&package;-&version;-x86_64-1.txz</URL>
-<SHA256>cf43e6070ea44e191b004a39b819cfaffce4386ea7f35e4ad27960c1d443a5d7</SHA256>
+<SHA256>586e4c6cedfc965acb4ac1d24c150f40d6d85ae8b972903c8f6a7e11d280dce8</SHA256>
 </FILE>
 
 <FILE Name="&plugin;/settings.example.cfg">
@@ -66,13 +70,14 @@ NETWORK_ACTIVITY_BYTES=65536
 DISK_COLOR='255 255 255'
 DISK_COLOR_FAILED='255 165 0'
 DISK_BRIGHTNESS=180
+DISK_ACTIVITY_STYLE=solid
 DISK_PULSE_MS=80
 DISK_ATA_PORTS=(1 2 3 4)
 POLL_INTERVAL=0.5
 REFRESH_INTERVAL=15
 DISK_STATUS_INTERVAL=30
 </INLINE>
-<SHA256>131fa8d97710ee2948bbb02619dd1b64608f3e4f2de6741967f50b75930e2773</SHA256>
+<SHA256>5df57e7f5840ce2408e44b196f70aca6745045391675400dbcce81cf03ba3105</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">

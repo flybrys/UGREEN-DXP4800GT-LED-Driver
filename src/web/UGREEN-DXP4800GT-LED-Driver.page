@@ -1,0 +1,7 @@
+Menu="OtherSettings"
+Type="xmenu"
+Title="UGREEN DXP4800 GT LEDs"
+Icon="lightbulb-o"
+Tag="lightbulb-o"
+---
+<?php require __DIR__ . '/settings.php'; ?>
