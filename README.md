@@ -1,7 +1,5 @@
 # UGREEN DXP4800GT LED Driver
 
-**Development branch:** the Community Apps installer still uses the stable `main` branch. This branch contains the settings page and solid-between-I/O drive behaviour for testing. Its preview installer is `https://raw.githubusercontent.com/flybrys/UGREEN-DXP4800GT-LED-Driver/dev/UGREEN-DXP4800GT-LED-Driver.plg`.
-
 Front panel power, LAN, and drive LEDs for the **UGREEN NASync DXP4800 GT** running Unraid. The plugin loads the matching LED and I²C drivers and starts its monitor automatically.
 
 **Tested only on Unraid 7.3.2 with kernel 6.18.38-Unraid and a DXP4800 GT.** The plugin checks the model and exact kernel before installing. Other Unraid releases and UGREEN models have not been tested and need their own matching driver build.
