@@ -2,11 +2,11 @@
 
 Front panel power, LAN, and drive LEDs for the **UGREEN NASync DXP4800 GT** running Unraid. The plugin loads the matching LED and I²C drivers and starts its monitor automatically.
 
-**Tested only on Unraid 7.3.2 with kernel 6.18.38-Unraid and a DXP4800 GT.** The plugin checks the model and exact kernel before installing. Other Unraid releases and UGREEN models have not been tested and need their own matching driver build.
+**Supported and tested only on Unraid 7.3.2 with kernel 6.18.38-Unraid and a DXP4800 GT.** The installer checks the exact model and kernel before loading its modules. Unraid 7.3.3, 7.3.4, and 7.3.5 use different kernels and are not supported by the current package. Installing the `.plg` directly does not bypass that check; each kernel needs matching modules and a tested release. See [compatibility issue #3](https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver/issues/3).
 
 ## Install with Community Apps
 
-After this plugin is listed in Community Apps, search for **UGREEN DXP4800GT LED Driver** and select **Install**. The listing is being prepared; until it appears, use **Plugins → Install Plugin** with this URL:
+On a supported Unraid 7.3.2 system, search **Apps** for **UGREEN DXP4800GT LED Driver** and select **Install**. The plugin is [listed in Community Apps](https://ca.unraid.net/apps/ugreen-dxp4800gt-led-driver-1ezhaxq0gvnyj6). If Apps is unavailable on that system, use **Plugins → Install Plugin** with this URL:
 
 `https://raw.githubusercontent.com/flybrys/UGREEN-DXP4800GT-LED-Driver/main/UGREEN-DXP4800GT-LED-Driver.plg`
 
@@ -23,6 +23,8 @@ Updates and removal are managed from Unraid's **Plugins** page. After installati
 The LAN colours and activity signal follow [UGREEN's LED guide](https://ai.ugreen.com/blogs/knowledge/ugreen-nas-led-indicators-meaning). The guide describes flashing for disk reads and breathing for sleep; the solid-between-I/O disk style is the default requested for this plugin. The LAN check tries `https://unraid.net/` and then `https://ai.ugreen.com/` every 60 seconds. Success means at least one site is reachable. The flash threshold is 64 KiB of network traffic per 0.5 second sample, so ordinary background traffic does not keep the light blinking.
 
 The drive LEDs map to the four SATA bays. Disk activity comes from the kernel's per-device block request events, with closely spaced requests grouped into a brief pulse. The settings page also offers a dark-while-idle style. If the event monitor cannot start, the plugin falls back to its earlier 0.5-second disk counter polling. A missing drive is shown as an empty bay. Orange requires an explicit SMART failure result; it does not replace Unraid's drive health monitoring. The power LED stays white for system conditions that this plugin cannot reliably identify, such as general system faults or sleep.
+
+Standby breathing uses the LED controller's smooth hardware fade. Bays enter that mode independently, so sleeping LEDs can be slightly out of phase or appear to chase one another. No phase-synchronization change is included in this release.
 
 ## Help and settings
 

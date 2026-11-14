@@ -4,6 +4,12 @@
 
 The `.plg` and release package target DXP4800 GT on Unraid 7.3.2, kernel `6.18.38-Unraid`. A new kernel release needs modules built from that exact Unraid kernel tree, a new package, checksums, and a revised compatibility check in the `.plg`. Do not reuse the current modules on another kernel.
 
+### Compatibility request for Unraid 7.3.4
+
+[Issue #3](https://github.com/flybrys/UGREEN-DXP4800GT-LED-Driver/issues/3) reports that the plugin stopped working after Unraid 7.3.3 and asks for 7.3.4 support. This is the expected result of the current exact-kernel check: the published modules target `6.18.38-Unraid`, while [Unraid 7.3.4 uses `6.18.58-Unraid`](https://docs.unraid.net/unraid-os/release-notes/7.3.4/). The Community Apps template also sets `MaxVer` to `7.3.2`. Removing those checks or relabeling the existing package would not make its kernel modules compatible.
+
+The matching [6.18.58-Unraid kernel source archive](https://github.com/ich777/unraid_kernel/releases/tag/6.18.58-Unraid) is available (release asset SHA-256 `da2ae45037a7f8049bbc9eeb306cf5385f59216c8c055c6ee827d243b016e962`). A 7.3.4 release still requires compiling the three modules against that tree, packaging them for the new kernel, and testing installation, LEDs, settings, removal, and reboot on a DXP4800 GT running 7.3.4. No such build or hardware test has been completed here. [Unraid 7.3.5 uses `6.18.60-Unraid`](https://docs.unraid.net/unraid-os/release-notes/7.3.5/) and needs its own matching build as well.
+
 ## Build inputs
 
 [`build/build-modules.sh`](build/build-modules.sh) expects:
